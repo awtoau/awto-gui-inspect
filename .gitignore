@@ -1,0 +1,49 @@
+# Flutter & Dart
+.dart_tool/
+.flutter/
+.packages
+build/
+doc/api/
+*.iml
+.idea/
+.vscode/
+
+# Generated files
+*.g.dart
+*.freezed.dart
+*.config.dart
+*.cover
+*.info
+
+# Tests
+.dart_tool/
+coverage/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.env
+.venv
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+*.tmp
+*.log
+tmp/
+
+# Node (for any JS tooling)
+node_modules/
+npm-debug.log
