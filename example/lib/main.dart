@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:awto_gui_inspect/awto_gui_inspect.dart';
+import 'test_mode.dart';
 
 void main() {
   runApp(const MyApp());
@@ -36,6 +37,7 @@ class HardwareTestPanel extends StatefulWidget {
 
 class _HardwareTestPanelState extends State<HardwareTestPanel> {
   String _lastCommand = 'No command executed';
+  String _selectedTestMode = 'none';
 
   void _executeCommand(String command) {
     setState(() {
@@ -46,8 +48,24 @@ class _HardwareTestPanelState extends State<HardwareTestPanel> {
     );
   }
 
+  void _setTestMode(String mode) {
+    setState(() {
+      _selectedTestMode = mode;
+      TestMode.setFailure(mode);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (TestMode.enabled) {
+      return TestModeHandler(
+        child: _buildApp(),
+      );
+    }
+    return _buildApp();
+  }
+
+  Widget _buildApp() {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Hardware Test Panel'),
@@ -68,6 +86,7 @@ class _HardwareTestPanelState extends State<HardwareTestPanel> {
           ),
         ],
       ),
+      drawer: _buildTestModeDrawer(),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -298,5 +317,98 @@ class _HardwareTestPanelState extends State<HardwareTestPanel> {
         ),
       ),
     );
+  }
+
+  Widget _buildTestModeDrawer() {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          DrawerHeader(
+            decoration: BoxDecoration(
+              color: Colors.blue.shade600,
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  '🧪 Test Mode',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Inject failure modes to test inspection',
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Failure Modes:',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+                const SizedBox(height: 8),
+                for (final mode in TestMode.failures) ...[
+                  RadioListTile<String>(
+                    title: Text(_getModeLabel(mode)),
+                    subtitle: Text(_getModeDescription(mode)),
+                    value: mode,
+                    groupValue: _selectedTestMode,
+                    onChanged: (value) {
+                      if (value != null) {
+                        _setTestMode(value);
+                        Navigator.pop(context);
+                      }
+                    },
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getModeLabel(String mode) {
+    final labels = {
+      'none': '✅ Normal Operation',
+      'null-reference': '🔴 Null Reference',
+      'widget-overflow': '⚠️  Widget Overflow',
+      'slow-render': '⏱️  Slow Rendering',
+      'memory-leak-simulate': '💾 Memory Leak',
+      'async-error': '⚡ Async Error',
+      'state-corruption': '🔀 State Corruption',
+      'missing-data': '❓ Missing Data',
+      'infinite-loop': '🔁 Infinite Loop',
+      'render-error': '🔴 Render Error',
+    };
+    return labels[mode] ?? mode;
+  }
+
+  String _getModeDescription(String mode) {
+    final descriptions = {
+      'none': 'Normal app operation',
+      'null-reference': 'Trigger null reference errors',
+      'widget-overflow': 'Test overflow handling',
+      'slow-render': 'Heavy animation rendering',
+      'memory-leak-simulate': 'Simulate memory allocation',
+      'async-error': 'Async operation failures',
+      'state-corruption': 'Corrupted widget state',
+      'missing-data': 'Missing or null data',
+      'infinite-loop': 'Slow computation loop',
+      'render-error': 'Render target errors',
+    };
+    return descriptions[mode] ?? '';
   }
 }
