@@ -316,11 +316,116 @@ class AwtoDeployment:
         print(f"  Launching: {binary}\n")
         subprocess.run([str(binary)], check=False)
 
+    def run_app_any(self):
+        """Run app on default device."""
+        print("▶️  Running app on default device...")
+        os.chdir(self.example_dir)
+        self.log("Available devices: run 'flutter devices' to see options")
+        self.run_cmd(["flutter", "run"], check=False)
+
+    def run_app_web(self, port=8080):
+        """Run app on web."""
+        print(f"🌐 Running app on web (localhost:{port})...")
+        os.chdir(self.example_dir)
+        self.log(f"  Opening browser at http://localhost:{port}")
+        self.run_cmd(["flutter", "run", "-d", "chrome", f"--web-port={port}"], check=False)
+
+    def run_app_linux(self, device=None):
+        """Run app on Linux desktop."""
+        print("🐧 Running app on Linux desktop...")
+        os.chdir(self.example_dir)
+        cmd = ["flutter", "run", "-d", "linux"]
+        if device:
+            cmd = ["flutter", "run", "-d", device]
+        self.run_cmd(cmd, check=False)
+
+    def run_app_android(self, device=None):
+        """Run app on Android."""
+        print("🤖 Running app on Android...")
+        os.chdir(self.example_dir)
+        cmd = ["flutter", "run", "-d", "android"]
+        if device:
+            cmd = ["flutter", "run", "-d", device]
+        self.run_cmd(cmd, check=False)
+
+    def run_app_ios(self, device=None):
+        """Run app on iOS."""
+        print("🍎 Running app on iOS...")
+        os.chdir(self.example_dir)
+        cmd = ["flutter", "run", "-d", "ios"]
+        if device:
+            cmd = ["flutter", "run", "-d", device]
+        self.run_cmd(cmd, check=False)
+
     # ==================== Test Commands ====================
 
+    def test_unit(self, test_file=None, coverage=False):
+        """Run unit tests."""
+        print("🧪 Running unit tests...")
+        os.chdir(self.project_root)
+
+        cmd = ["flutter", "test", "--unit-tests-only"]
+
+        if test_file:
+            cmd.append(f"test/{test_file}")
+            self.log(f"  Testing: {test_file}")
+
+        if coverage:
+            cmd.append("--coverage")
+            self.log("  Coverage enabled")
+
+        return self.run_cmd(cmd, check=False)
+
+    def test_widget(self, test_file=None, coverage=False):
+        """Run widget tests."""
+        print("🎨 Running widget tests...")
+        os.chdir(self.project_root)
+
+        cmd = ["flutter", "test"]
+
+        if test_file:
+            cmd.append(f"test/{test_file}")
+            self.log(f"  Testing: {test_file}")
+        else:
+            cmd.append("test/")
+
+        if coverage:
+            cmd.append("--coverage")
+            self.log("  Coverage enabled")
+
+        return self.run_cmd(cmd, check=False)
+
+    def test_integration(self, test_file=None):
+        """Run integration tests."""
+        print("🔗 Running integration tests...")
+        os.chdir(self.example_dir)
+
+        cmd = ["flutter", "test", "integration_test/"]
+
+        if test_file:
+            cmd.append(f"integration_test/{test_file}")
+            self.log(f"  Testing: {test_file}")
+
+        return self.run_cmd(cmd, check=False)
+
+    def test_app(self):
+        """Run the app (manual testing)."""
+        print("▶️  Running app for manual testing...")
+        os.chdir(self.example_dir)
+
+        self.log("  Launching app for testing")
+        self.log("  You can:")
+        self.log("    • Open drawer to select test failure modes")
+        self.log("    • Right-click widgets to inspect")
+        self.log("    • Copy data as JSON/text")
+        self.log("    • Log to AI with comments")
+        self.log("")
+
+        return self.run_cmd(["flutter", "run"], check=False)
+
     def test_flutter(self):
-        """Run Flutter tests."""
-        print("🧪 Running Flutter tests...")
+        """Run all Flutter tests."""
+        print("🧪 Running all Flutter tests...")
         os.chdir(self.project_root)
         return self.run_cmd(["python", "cli.py", "test"], check=False)
 
@@ -341,6 +446,41 @@ class AwtoDeployment:
         print("✅ Running full verification...")
         os.chdir(self.project_root)
         return self.run_cmd(["python", "cli.py", "verify"], check=False)
+
+    def test_all(self):
+        """Run all tests."""
+        print("🧪 Running all tests...\n")
+
+        tests = [
+            ("Unit tests", self.test_unit),
+            ("Widget tests", self.test_widget),
+            ("Lint checks", self.test_lint),
+            ("Static analysis", self.test_analyze),
+        ]
+
+        passed = 0
+        failed = 0
+
+        for test_name, test_func in tests:
+            print(f"\n{'='*50}")
+            print(f"Running: {test_name}")
+            print('='*50)
+            try:
+                if test_func():
+                    passed += 1
+                    self.log(f"✅ {test_name} passed")
+                else:
+                    failed += 1
+                    self.log(f"❌ {test_name} failed")
+            except Exception as e:
+                failed += 1
+                self.log(f"❌ {test_name} error: {e}", "error")
+
+        print(f"\n{'='*50}")
+        print(f"Test Summary: {passed} passed, {failed} failed")
+        print('='*50)
+
+        return failed == 0
 
     # ==================== Clean Commands ====================
 
@@ -431,13 +571,33 @@ def main():
         description="AWTO GUI Inspect deployment and build management",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples (Human):
+BUILD Examples:
   python awto.py build flutter          # Build Flutter package
-  python awto.py build linux --release  # Build Linux release
+  python awto.py build linux            # Build Linux release
   python awto.py build web              # Build web version
-  python awto.py status                 # Show project status
+  python awto.py build all              # Build all platforms
 
-Examples (AI Agents):
+DEPLOY Examples:
+  python awto.py deploy linux           # Deploy to Linux system
+  python awto.py deploy web             # Deploy web version
+  python awto.py deploy tarball         # Create tarball
+
+TEST Examples:
+  python awto.py test unit              # Run unit tests
+  python awto.py test widget            # Run widget tests
+  python awto.py test integration       # Run integration tests
+  python awto.py test all               # Run all tests
+  python awto.py test verify            # Full verification
+  python awto.py test unit --coverage   # With coverage report
+
+RUN Examples:
+  python awto.py run demo web           # Web demo (localhost:8080)
+  python awto.py run demo linux         # Linux desktop demo
+  python awto.py run app web            # Run app on web
+  python awto.py run app linux          # Run app on Linux
+  python awto.py run test-app           # Manual testing mode
+
+AI AGENT Examples:
   python awto.py build linux --json --tail 30
   python awto.py test verify --json --quiet
   python awto.py deploy linux --json --tail 50
@@ -472,13 +632,30 @@ Global Options:
 
     # Run subcommands
     run = subparsers.add_parser("run", help="Run applications")
-    run.add_argument("action", choices=["demo"])
-    run.add_argument("platform", choices=["web", "linux"])
+    run.add_argument(
+        "action",
+        choices=["demo", "app", "test-app"],
+        help="What to run"
+    )
+    run.add_argument(
+        "platform",
+        nargs="?",
+        choices=["web", "linux", "android", "ios"],
+        help="Platform (for demo/app)"
+    )
     run.add_argument("--port", type=int, default=8080, help="Web port (web only)")
+    run.add_argument("--device", help="Device ID (android/iOS only)")
 
     # Test subcommands
-    test = subparsers.add_parser("test", help="Run tests")
-    test.add_argument("target", choices=["flutter", "lint", "analyze", "verify"])
+    test = subparsers.add_parser("test", help="Run tests and validation")
+    test.add_argument(
+        "target",
+        choices=["flutter", "unit", "widget", "integration", "lint", "analyze", "verify", "all"],
+        help="Test type to run"
+    )
+    test.add_argument("--test-file", help="Specific test file to run")
+    test.add_argument("--coverage", action="store_true", help="Generate coverage report")
+    test.add_argument("--update-goldens", action="store_true", help="Update golden files")
 
     # Clean subcommands
     clean = subparsers.add_parser("clean", help="Clean artifacts")
@@ -528,9 +705,39 @@ Global Options:
                     runner.run_demo_web(args.port)
                 elif args.platform == "linux":
                     runner.run_demo_linux()
+                else:
+                    print("Platform required for demo (web or linux)")
+                    return 1
+
+            elif args.action == "app":
+                if args.platform == "web":
+                    runner.run_app_web(args.port)
+                elif args.platform == "linux":
+                    runner.run_app_linux(args.device)
+                elif args.platform == "android":
+                    runner.run_app_android(args.device)
+                elif args.platform == "ios":
+                    runner.run_app_ios(args.device)
+                else:
+                    runner.run_app_any()
+
+            elif args.action == "test-app":
+                runner.test_app()
 
         elif args.command == "test":
-            if args.target == "flutter":
+            if args.target == "unit":
+                runner.test_unit(
+                    test_file=args.test_file,
+                    coverage=args.coverage
+                )
+            elif args.target == "widget":
+                runner.test_widget(
+                    test_file=args.test_file,
+                    coverage=args.coverage
+                )
+            elif args.target == "integration":
+                runner.test_integration(test_file=args.test_file)
+            elif args.target == "flutter":
                 runner.test_flutter()
             elif args.target == "lint":
                 runner.test_lint()
@@ -538,6 +745,8 @@ Global Options:
                 runner.test_analyze()
             elif args.target == "verify":
                 runner.test_verify()
+            elif args.target == "all":
+                runner.test_all()
 
         elif args.command == "clean":
             if args.target == "builds":
