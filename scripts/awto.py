@@ -2,8 +2,8 @@
 """
 AWTO GUI Inspect deployment and build management.
 
-Unified CLI for building, testing, deploying, and managing
-the awto_gui_inspect Flutter package across platforms.
+CLI coding standards: AI-agent friendly, JSON output, tail on errors, quiet by default.
+See CLI_CODING_STANDARDS.md for design patterns.
 
 Usage:
   python scripts/awto.py build flutter     # Build Flutter package
@@ -14,6 +14,12 @@ Usage:
   python scripts/awto.py run demo          # Run web demo
   python scripts/awto.py test              # Run all tests
   python scripts/awto.py clean             # Clean artifacts
+
+Global options:
+  --json               Output as JSON (for AI agents)
+  --tail N             Show last N lines of logs on error
+  --quiet              Suppress output on success
+  --verbose            Show detailed output (overrides quiet)
 """
 
 import argparse
@@ -24,24 +30,106 @@ import shutil
 import json
 from pathlib import Path
 from datetime import datetime
+from dataclasses import dataclass, asdict
+from typing import Optional, List
+
+@dataclass
+class CommandResult:
+    """Structured command result."""
+    command: str
+    status: str  # success|error|skipped
+    exit_code: int
+    timestamp: str
+    duration_ms: int
+    output: dict
+    errors: Optional[List[str]] = None
+    log_tail: Optional[List[str]] = None
+
+    def to_dict(self):
+        return {k: v for k, v in asdict(self).items() if v is not None}
 
 class AwtoDeployment:
-    """AWTO GUI Inspect deployment manager."""
+    """AWTO GUI Inspect deployment manager (AI-agent friendly)."""
 
-    def __init__(self):
+    def __init__(self, json_output=False, tail_lines=0, quiet=False, verbose=False, log_file=None):
         self.project_root = Path(__file__).parent.parent.absolute()
         self.example_dir = self.project_root / "example"
         self.build_dir = self.example_dir / "build"
         self.scripts_dir = self.project_root / "scripts"
 
-    def run_cmd(self, cmd, cwd=None, check=True):
-        """Run command and return result."""
+        # CLI options
+        self.json_output = json_output
+        self.tail_lines = tail_lines
+        self.quiet = quiet and not verbose  # verbose overrides quiet
+        self.verbose = verbose
+        self.log_file = log_file
+
+        # Log buffer
+        self.log_buffer = []
+
+    def log(self, message, level="info"):
+        """Log message with quiet/verbose handling."""
+        self.log_buffer.append(message)
+
+        if self.json_output:
+            return  # Don't print in JSON mode
+
+        if level in ["error", "warning"]:
+            print(message)  # Always show errors/warnings
+        elif not self.quiet or self.verbose:
+            print(message)  # Show info if not quiet or if verbose
+
+    def run_cmd(self, cmd, cwd=None, check=True, capture=True):
+        """Run command with logging and error handling."""
         cwd = cwd or self.project_root
-        print(f"  $ {' '.join(cmd)}")
-        result = subprocess.run(cmd, cwd=cwd, capture_output=False, check=False)
-        if check and result.returncode != 0:
-            raise RuntimeError(f"Command failed: {' '.join(cmd)}")
-        return result.returncode == 0
+
+        if not self.quiet or self.verbose:
+            self.log(f"  $ {' '.join(cmd)}")
+
+        try:
+            result = subprocess.run(
+                cmd,
+                cwd=cwd,
+                capture_output=capture,
+                text=True,
+                check=False
+            )
+
+            if capture and result.stderr:
+                self.log_buffer.extend(result.stderr.split('\n'))
+
+            if check and result.returncode != 0:
+                error_msg = f"Command failed: {' '.join(cmd)}"
+                self.log(error_msg, "error")
+                raise RuntimeError(error_msg)
+
+            return result.returncode == 0, result
+        except Exception as e:
+            self.log(str(e), "error")
+            raise
+
+    def output_result(self, command_name, status, output_data=None, errors=None, exit_code=0, duration_ms=0):
+        """Output result as JSON or human format."""
+        result = CommandResult(
+            command=command_name,
+            status=status,
+            exit_code=exit_code,
+            timestamp=datetime.now().isoformat(),
+            duration_ms=duration_ms,
+            output=output_data or {},
+            errors=errors,
+            log_tail=self.log_buffer[-self.tail_lines:] if self.tail_lines > 0 else None
+        )
+
+        if self.json_output:
+            print(json.dumps(result.to_dict(), indent=2))
+        elif status == "error" and errors:
+            for error in errors:
+                self.log(error, "error")
+            if self.tail_lines > 0:
+                self.log("Error log tail:", "error")
+                for line in result.log_tail or []:
+                    self.log(f"  {line}", "error")
 
     # ==================== Build Commands ====================
 
@@ -343,28 +431,32 @@ def main():
         description="AWTO GUI Inspect deployment and build management",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
+Examples (Human):
   python awto.py build flutter          # Build Flutter package
   python awto.py build linux --release  # Build Linux release
   python awto.py build web              # Build web version
-  python awto.py build all              # Build all platforms
-
-  python awto.py deploy linux           # Deploy to Linux system
-  python awto.py deploy web             # Deploy web version
-  python awto.py deploy tarball         # Create deployment tarball
-
-  python awto.py run demo web           # Run web demo
-  python awto.py run demo linux         # Run Linux demo
-
-  python awto.py test flutter           # Run tests
-  python awto.py test verify            # Full verification
-
-  python awto.py clean builds           # Clean artifacts
-  python awto.py clean all              # Full clean
-
   python awto.py status                 # Show project status
+
+Examples (AI Agents):
+  python awto.py build linux --json --tail 30
+  python awto.py test verify --json --quiet
+  python awto.py deploy linux --json --tail 50
+
+Global Options:
+  --json               Output as JSON (for AI agents/automation)
+  --tail N             Show last N lines of logs on error (0=disabled)
+  --quiet              Suppress output on success
+  --verbose            Show detailed output (overrides quiet)
+  --log-file FILE      Write logs to file
         """,
     )
+
+    # Global options
+    parser.add_argument("--json", action="store_true", help="Output as JSON")
+    parser.add_argument("--tail", type=int, default=0, help="Tail N lines on error (default: 0)")
+    parser.add_argument("--quiet", action="store_true", help="Suppress output on success")
+    parser.add_argument("--verbose", action="store_true", help="Detailed output (overrides quiet)")
+    parser.add_argument("--log-file", help="Write logs to file")
 
     subparsers = parser.add_subparsers(dest="command", help="Commands")
 
@@ -401,7 +493,15 @@ Examples:
         parser.print_help()
         return 0
 
-    runner = AwtoDeployment()
+    runner = AwtoDeployment(
+        json_output=args.json,
+        tail_lines=args.tail,
+        quiet=args.quiet,
+        verbose=args.verbose,
+        log_file=args.log_file
+    )
+
+    start_time = datetime.now()
 
     try:
         if args.command == "build":
@@ -448,10 +548,24 @@ Examples:
         elif args.command == "status":
             runner.status()
 
+        duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+        runner.output_result(
+            command_name=args.command,
+            status="success",
+            output_data={"message": f"{args.command} completed"},
+            duration_ms=duration_ms
+        )
         return 0
 
     except Exception as e:
-        print(f"\n✗ Error: {e}", file=sys.stderr)
+        duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+        runner.output_result(
+            command_name=args.command,
+            status="error",
+            errors=[str(e)],
+            exit_code=1,
+            duration_ms=duration_ms
+        )
         return 1
 
 
